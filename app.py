@@ -26,13 +26,27 @@ st.set_page_config(
 
 load_dotenv()
 
-# API Key Check & Client Init
-if not os.getenv("OPENAI_API_KEY"):
-    st.warning("⚠️ SYSTEM ALERT: OpenAI API Key missing in environment variables.")
-else:
-    os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
+# --- API KEY HANDLING (ROBUST FIX) ---
+# 1. Try getting key from Environment (Local .env on your Mac)
+api_key = os.getenv("OPENAI_API_KEY")
 
-client = OpenAI()
+# 2. If not found locally, check Streamlit Cloud Secrets
+if not api_key:
+    try:
+        # Streamlit Cloud stores secrets in a specific dictionary
+        if "OPENAI_API_KEY" in st.secrets:
+            api_key = st.secrets["OPENAI_API_KEY"]
+    except (FileNotFoundError, KeyError):
+        pass
+
+# 3. Final Critical Check
+if not api_key:
+    st.error("🚨 CRITICAL ERROR: OpenAI API Key is missing.")
+    st.info("DEPLOYMENT FIX: Go to Streamlit Cloud Dashboard -> App Settings -> Secrets and paste your API Key.")
+    st.stop()  # Stop execution here to prevent the crash
+
+# 4. Initialize Client explicitly with the found key
+client = OpenAI(api_key=api_key)
 
 BASE_DIR = Path(__file__).resolve().parent
 # Ensure this matches where you saved your model in train_model.py
@@ -341,6 +355,7 @@ class CycloneBeast(nn.Module):
 
 @st.cache_resource
 def load_model():
+    # Auto-detect device (works on Mac M4, Windows, Linux)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if MODEL_PATH.exists():
         try:
